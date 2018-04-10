@@ -1,0 +1,365 @@
+---
+title: "PQHS 471 HW1"
+author: "Youjun Li"
+date: "April 09, 2018"
+output:
+  html_document: 
+    code_folding: show
+    toc: TRUE
+    toc_float: TRUE
+    number_sections: FALSE
+  pdf_document:
+    number_sections: yes
+geometry: margin=1.75in
+fontsize: 11pt
+documentclass: article
+---
+```{r,echo=F,warning=F}
+library(knitr)
+options(width=50)
+opts_chunk$set(tidy.opts=list(width.cutoff=50),tidy=T,message=F, warning=F)
+
+```
+
+# ISLR Chapter 7 
+## 9
+### a 
+```{r}
+library(MASS)
+data("Boston")
+fit=lm(nox~poly(dis, 3), Boston)
+summary(fit)
+newdis=seq(min(Boston$dis),max(Boston$dis),0.1)
+plot(Boston$dis, Boston$nox)
+lines(newdis, predict(fit, newdata = list(dis=newdis)), col='red', lwd=3)
+```
+
+### b
+```{r}
+library(boot)
+f=list()
+rss=c()
+lgd=c()
+plot(Boston$dis,Boston$nox, col='white')
+for (i in 1:10)
+{
+  f[[i]]=glm(nox~poly(dis,i), data=Boston)
+  rss[i]=sum(f[[i]]$residuals^2)
+  lines(newdis, predict(f[[i]], newdata = list(dis=newdis)),lwd=2, col=i)
+  lgd[i]=paste("poly",i,sep="_")
+}
+legend('topright', lgd[1:10], lwd=rep(2,10), col = c(1:10), cex=0.7)
+plot(rss, type = 'l')
+```
+ 
+
+### c
+```{r}
+set.seed(621)
+cv.mse=c()
+for (i in 1:10) 
+{
+  cv.mse[i]=cv.glm(Boston, f[[i]], K=10)$delta[1] 
+}
+plot(cv.mse,type = 'l')
+match(min(cv.mse), cv.mse)
+```
+
+According to the cross-validation $MSE$, we end up with $degree=3$.
+
+### d
+```{r}
+library(splines)
+fit1=lm(nox~bs(dis, df=4), data = Boston)
+summary(fit1)
+attr(bs(Boston$dis,df=4),"knots")
+plot(Boston$dis, Boston$nox)
+lines(newdis, predict(fit1, newdata = list(dis=newdis)), col='red', lwd=3)
+```
+
+By the default setting of the `bs` function, the number of knots are determined once the `df` is specified, in this case, there is one knot.
+
+### e
+```{r}
+f1=list()
+rss1=c()
+lgd1=c()
+plot(Boston$dis,Boston$nox, col='white')
+for (i in 3:12)
+{
+  f1[[i]]=glm(nox~bs(dis,df=i), data=Boston)
+  rss1[i]=sum(f1[[i]]$residuals^2)
+  lines(newdis, predict(f1[[i]], newdata = list(dis=newdis)),lwd=2, col=i)
+  lgd1[i]=paste("df",i,sep="_")
+}
+legend('topright', lgd1[3:12], lwd=rep(2,10), col = c(1:10), cex=0.7)
+plot(c(3:12),rss1[3:12], type = 'l')
+```
+
+The $RSS$ keeps decreasing as the `df` increases.
+
+### f
+```{r}
+set.seed(621)
+cv.mse1=c()
+for (i in 3:12) 
+{
+  cv.mse1[i]=cv.glm(Boston, f1[[i]], K=10)$delta[1] 
+}
+#warnings are due to different range of `dis` from training to testing sets during cv
+plot(c(3:12),cv.mse1[3:12],type = 'l')
+match(min(cv.mse1,na.rm = T), cv.mse1)
+```
+
+According to cross-validation $MSE$, the best degrees of freedom for a regression spline is $11$.
+
+
+# ISLR Chapter 8 
+## 9
+### a
+```{r}
+library(ISLR)
+data(OJ)
+set.seed(621)
+splt=sample(1:nrow(OJ), 800)
+OJ.trn=OJ[splt, ]
+OJ.tst=OJ[-splt, ]
+```
+
+### b
+```{r}
+library(tree)
+#no variable called `Buy`
+tree1=tree(Purchase ~ ., data = OJ.trn)
+summary(tree1)
+```
+
+The training error rate is $0.1512$ and we have $10$ terminal nodes.
+
+### c
+```{r}
+tree1
+```
+
+Let's pick the first terminal nodes: we split at `LoyalCH` $< 0.0356415$ and get $54$ observations that are classified as `MM`.
+
+### d
+```{r}
+plot(tree1)
+text(tree1, pretty=0)
+```
+
+We can see that `LoyalCH` is the most important one for classification. The condition at each split indicates the branch on the left.
+
+### e
+```{r}
+(cfmtrx=table(predict(tree1, OJ.tst, type = 'class'), OJ.tst$Purchase))
+(cfmtrx[2,1]+cfmtrx[1,2])/nrow(OJ.tst)
+```
+
+### f
+```{r}
+set.seed(621)
+OJ.cv=cv.tree(tree1, FUN=prune.tree)
+```
+
+### g
+```{r}
+plot(OJ.cv$size,OJ.cv$dev)
+```
+
+### h
+It is still size of $10$ that gives the smallest cross-validation error rate.
+
+### i
+Since CV didn't lead to selection of a pruned tree, we prune with five nodes.
+```{r}
+tree1.prune=prune.tree(tree1, best = 5)
+plot(tree1.prune)
+text(tree1.prune, pretty = 0)
+```
+
+### j
+```{r}
+summary(tree1.prune)
+```
+
+The training error rate here is $0.1662$, which is higher than it is of unpruned tree.
+
+### k
+```{r}
+(cfmtrx1=table(predict(tree1.prune, OJ.tst, type = 'class'), OJ.tst$Purchase))
+(cfmtrx1[2,1]+cfmtrx1[1,2])/nrow(OJ.tst)
+```
+
+The test error rate here is $0.1814815$, a little improvement over the unpruned tree.
+
+
+# ISLR Chapter 9 
+## 8
+### a
+Same as Q9 in Chapter 8.
+
+### b
+```{r}
+library(e1071)
+svm1=svm(Purchase ~ ., data = OJ.trn, kernel = "linear", cost = 0.01)
+summary(svm1)
+```
+
+With linear kernel at cost of $0.01$, we got $433$ upport vectors ($215$ for `CH`).
+
+### c
+```{r}
+(cfmtrx2=table(svm1$fitted, OJ.trn$Purchase))
+(cfmtrx3=table(predict(svm1, OJ.tst), OJ.tst$Purchase))
+(cfmtrx2[2,1]+cfmtrx2[1,2])/nrow(OJ.trn)
+(cfmtrx3[2,1]+cfmtrx3[1,2])/nrow(OJ.tst)
+```
+
+The training error rate is $0.16125$. The testing error rate is $0.1851852$.
+
+### d
+```{r}
+set.seed(621)
+svm1.tune=tune(svm, Purchase ~ ., data = OJ.trn, kernel = "linear", ranges = list(cost = seq(0.01,10,length.out = 20)))
+summary(svm1.tune) #5.793684
+```
+
+### e
+```{r}
+svm1.best=svm(Purchase ~ ., data = OJ.trn, kernel = "linear", cost = 5.793684)
+summary(svm1.best)
+(cfmtrx4=table(svm1.best$fitted, OJ.trn$Purchase))
+(cfmtrx5=table(predict(svm1.best, OJ.tst), OJ.tst$Purchase))
+
+(cfmtrx4[2,1]+cfmtrx4[1,2])/nrow(OJ.trn)
+(cfmtrx5[2,1]+cfmtrx5[1,2])/nrow(OJ.tst)
+```
+
+The optimal training error rate is $0.15625$. The testing error rate is $0.1703704$.
+
+### f
+```{r}
+svm2=svm(Purchase ~ ., data = OJ.trn, kernel = "radial", cost = 0.01)
+summary(svm2)
+
+(cfmtrx6=table(svm2$fitted, OJ.trn$Purchase))
+(cfmtrx7=table(predict(svm2, OJ.tst), OJ.tst$Purchase))
+(cfmtrx6[2,1]+cfmtrx6[1,2])/nrow(OJ.trn)
+(cfmtrx7[2,1]+cfmtrx7[1,2])/nrow(OJ.tst)
+#the classification at cost=0.01 is bad
+
+set.seed(621)
+svm2.tune=tune(svm, Purchase ~ ., data = OJ.trn, kernel = "radial", ranges = list(cost = seq(0.01,10,length.out = 20)))
+summary(svm2.tune) #2.638947
+
+svm2.best=svm(Purchase ~ ., data = OJ.trn, kernel = "radial", cost = 2.638947)
+summary(svm2.best)
+(cfmtrx8=table(svm2.best$fitted, OJ.trn$Purchase))
+(cfmtrx9=table(predict(svm2.best, OJ.tst), OJ.tst$Purchase))
+(cfmtrx8[2,1]+cfmtrx8[1,2])/nrow(OJ.trn)
+(cfmtrx9[2,1]+cfmtrx9[1,2])/nrow(OJ.tst)
+```
+The optimal training error rate for radial kernel is $0.14125$. The testing error rate is $0.1740741$.
+
+### g
+```{r}
+svm3=svm(Purchase ~ ., data = OJ.trn, kernel = "polynomial", degree = 2, cost = 0.01)
+summary(svm3)
+
+(cfmtrx10=table(svm3$fitted, OJ.trn$Purchase))
+(cfmtrx11=table(predict(svm3, OJ.tst), OJ.tst$Purchase))
+(cfmtrx10[2,1]+cfmtrx10[1,2])/nrow(OJ.trn)
+(cfmtrx11[2,1]+cfmtrx11[1,2])/nrow(OJ.tst)
+#similar as radial kernel, the performance of 2-degree-polynomial kernel at cost=0.01 is bad
+
+set.seed(621)
+svm3.tune=tune(svm, Purchase ~ ., data = OJ.trn, kernel = "polynomial", degree = 2, ranges = list(cost = seq(0.01,10,length.out = 20)))
+summary(svm3.tune) #6.319474
+
+svm3.best=svm(Purchase ~ ., data = OJ.trn, kernel = "polynomial", degree = 2, cost = 6.319474)
+summary(svm3.best)
+(cfmtrx12=table(svm3.best$fitted, OJ.trn$Purchase))
+(cfmtrx13=table(predict(svm3.best, OJ.tst), OJ.tst$Purchase))
+(cfmtrx12[2,1]+cfmtrx12[1,2])/nrow(OJ.trn)
+(cfmtrx13[2,1]+cfmtrx13[1,2])/nrow(OJ.tst)
+
+```
+The optimal training error rate for 2-degree-polynomial kernel is $0.14375$. The testing error rate is $0.1962963$.
+
+### h
+Overall, the linear and radial kernel performed almost equally well (linear with slightly better testing error and radial with better training error). Although the 2-degree-ploynomial kernel gives a good training error rate, its testing error rate is the worst.
+
+# Boosting and Random Forest with `Khan` Dataset
+## Boosting
+```{r}
+library(ISLR)
+library(tidyverse)
+library(xgboost)
+
+data("Khan")
+nm=c()
+for (i in 1:ncol(Khan$xtrain))
+{
+  nm[i]=paste("G",i,sep="")
+}
+
+colnames(Khan$xtrain)=nm
+colnames(Khan$xtest)=nm
+dtrain=xgb.DMatrix(data = Khan$xtrain, label = Khan$ytrain-1)
+dtest=xgb.DMatrix(data = Khan$xtest, label = Khan$ytest-1)
+
+watchlist=list(train=dtrain, test=dtest)
+xgb_params=list("objective" = "multi:softprob","num_class" = length(unique(Khan$ytrain)))
+set.seed(621)
+bst=xgb.train(params = xgb_params, data=dtrain,  max.depth=2, nthread = 1, eta=1, nround=10, watchlist=watchlist,eval.metric = "merror", eval.metric = "mlogloss")
+#5 rounds are sufficient
+
+pred=predict(bst, dtest)
+test_prediction=matrix(pred, nrow = 4,ncol=length(pred)/4) %>%
+  t() %>% data.frame() %>%
+  mutate(label = Khan$ytest, max_prob = max.col(., "last"))
+importance_matrix = xgb.importance(feature_names = nm, model = bst)
+head(importance_matrix)
+
+#linear
+set.seed(621)
+bst.l=xgb.train(params = xgb_params, data=dtrain,  max.depth=2, nthread = 1, booster='gblinear', nround=10, watchlist=watchlist,eval.metric = "merror", eval.metric = "mlogloss")
+pred.l=predict(bst.l, dtest)
+test_prediction.l=matrix(pred.l, nrow = 4,ncol=length(pred.l)/4) %>%
+  t() %>% data.frame() %>%
+  mutate(label = Khan$ytest, max_prob = max.col(., "last"))
+
+library(caret)
+#for tree boosting
+confusionMatrix(factor(test_prediction$max_prob),factor(test_prediction$label),mode = "everything")
+#for linear boosting
+confusionMatrix(factor(test_prediction.l$max_prob),factor(test_prediction.l$label),mode = "everything")
+```
+Tree boosting is better.
+
+
+## Random forest
+
+```{r, eval=TRUE}
+library(randomForest)
+
+cntrl=trainControl(method="repeatedcv",number=5, repeats = 5, search="grid")
+tunegrid=data.frame(.mtry=round(seq(40,100,length.out = 20)))
+
+ptm <- proc.time()
+fit.rf=train(x=Khan$xtrain,y=as.factor(Khan$ytrain), method="rf",trControl=cntrl,tuneGrid=tunegrid)
+proc.time() - ptm
+
+print(fit.rf)
+plot(fit.rf)
+
+khantest=as.data.frame(cbind(Khan$xtest,as.factor(Khan$ytest)))
+yhat.rf=predict(fit.rf, newdata = khantest)
+confusionMatrix(data = yhat.rf, khantest$V2309)
+#variable importance
+varImp(fit.rf, scale=FALSE)
+```
+Both random forest and boosting performed well. But it took some time for random forest to find the optimal `mtry`. Linear boosting in this case didn't out perform tree boosting, and tree boosting almost takes no time to run. So I would use tree boosting. 
+
